@@ -1,0 +1,6 @@
+sqlparse
+pandas
+sql_metadata
+openai
+cx-Oracle
+mysql-connector-python
