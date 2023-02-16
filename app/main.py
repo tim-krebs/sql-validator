@@ -1,71 +1,42 @@
+import os
 import re
 import csv
+import openai
 import logging
 import cx_Oracle
-import numpy as np
+import time
 from bs4 import BeautifulSoup
-import sqlparse
-import datetime
+from dotenv import load_dotenv
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
-import pandas as pd
 
-def validate_sql_syntax(sql_query):
+
+def check_sql_syntax(sql_statement):
     """
-    it checks the type of statement and validates it further. For example, it checks if the 
-    first token in the statement is 'SELECT' for a SELECT statement, 'UPDATE' for an UPDATE 
-    statement, and so on. If the first token doesn't match the expected value, it raises an 
-    exception.
+    This function checks the syntax of the SQL statement using the Codex model.
 
     Parameters
     ----------
-    sql_query : str
-        SQL query to be validated.
+    sql_statement : str
+        SQL statement.
+
     """
-    try:
-        parsed = sqlparse.parse(sql_query)
-        #if len(parsed) > 1:
-        #    raise Exception("Error: Multiple statements found in the query.")
-        
-        statement = parsed[0]
-        if statement.get_type() not in ['SELECT', 'UPDATE', 'DELETE', 'INSERT', 'MERGE']:
-            if statement.get_type() == 'BEGIN':
-                return True
-            else:
-                raise Exception("Error: Unsupported statement type found.")
-        
-        if statement.get_type() == 'SELECT':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'SELECT':
-                raise Exception("Error: Invalid SELECT statement.")
-            
-        elif statement.get_type() == 'UPDATE':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'UPDATE':
-                raise Exception("Error: Invalid UPDATE statement.")
-            
-        elif statement.get_type() == 'DELETE':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'DELETE':
-                raise Exception("Error: Invalid DELETE statement.")
-            
-        elif statement.get_type() == 'INSERT':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'INSERT':
-                raise Exception("Error: Invalid INSERT statement.")
-            
-        elif statement.get_type() == 'MERGE':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'MERGE':
-                raise Exception("Error: Invalid MERGE statement.")
-        
-        elif statement.get_type() == 'BEGIN':
-            if not statement.tokens or statement.tokens[0].value.upper() != 'BEGIN':
-                raise Exception("Error: Invalid BEGIN statement.")
-        
-        return True
-    except Exception as e:
-        print(f"{e}")
+    # Send the SQL statement to the Codex model
+    response = openai.Completion.create(
+        engine="davinci-codex",
+        prompt=f"Check the syntax of this SQL statement:\n{sql_statement}\n\n",
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        temperature=0.5,
+    )
+
+    # Check if the model generated any errors or warnings
+    if "syntax error" in response.choices[0].text.lower():
         return False
-
-
+    elif "warning" in response.choices[0].text.lower():
+        return False
+    else:
+        return True
 
 def get_awrr_info(filepath):
     """
@@ -153,64 +124,33 @@ def file_writer(filepath, sql_statements):
         for sql_statement in sql_statements:
             writer.writerow([sql_statement])
 
-def sql_classification(sql_statements):
-    """
-    This function classifies the SQL statements using KMeans clustering.
-
-    Parameters
-    ----------
-    sql_statements : list
-        List of SQL statements.
-
-    """
-
-    # Vectorize the SQL statements using TF-IDF
-    vectorizer = TfidfVectorizer(stop_words='english')
-    X = vectorizer.fit_transform(sql_statements)
-
-    # Cluster the SQL statements using KMeans
-    kmeans = KMeans(n_clusters=3, random_state=0)
-    kmeans.fit(X)
-
-
-    # Extract features from the new query
-    for query in sql_statements:
-        new_query_features = vectorizer.transform([query])
-
-    # Predict the cluster of the new query
-    from sklearn.decomposition import TruncatedSVD
-    pca = TruncatedSVD(n_components=2, random_state=0)
-    X_pca = pca.fit_transform(X)
-
-    # Plot the clusters with different colors
-    colors = np.random.rand(3)
-    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=colors)
-    plt.show()
 
 def main():
+    # Load the environment variables
+    load_dotenv()
+    openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    # Initialize the Oracle client
-    cx_Oracle.init_oracle_client(lib_dir=r"C:\oracle\instantclient_21_9")
+    awrr_file = "awrr/awrrpt_1_285_286.html"
 
-    # Test to see if the cx_Oracle is recognized
     logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
-    logging.warning(cx_Oracle.version)
 
-    # This fails for me at this point but will succeed after the solution described below
+    # Initialize the Oracle client - not needed anymore
+    cx_Oracle.init_oracle_client(lib_dir=r"C:\oracle\instantclient_21_9")
+    logging.warning(cx_Oracle.version)
     logging.warning(cx_Oracle.clientversion())
 
     # Get the AWR report information
-    db_name, db_id, hostname = get_awrr_info("awrr/awrrpt_1_285_286.html")
-
-    # Extract the SQL statements from the HTML file
-    sql_statements = pars_queries("awrr/awrrpt_1_285_286.html")
+    db_name, db_id, hostname = get_awrr_info(awrr_file)
+    sql_statements = pars_queries(awrr_file)
 
     # Write the SQL statements to a CSV file
     file_name = db_name + "_" + db_id + "_" + hostname + ".csv"
     file_writer(file_name, sql_statements)
 
     # Classifies the SQL statements
-    sql_classification(sql_statements)
+    for sql_statement in sql_statements:
+        logging.warning(check_sql_syntax(sql_statement))
+
 
 
 if __name__ == '__main__':
