@@ -1,11 +1,16 @@
-import os
 import re
+import csv
 import logging
 import cx_Oracle
+import numpy as np
 from bs4 import BeautifulSoup
 import sqlparse
+import datetime
 
-import sqlparse
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import pandas as pd
 
 def validate_sql_syntax(sql_query):
     """
@@ -123,13 +128,64 @@ def pars_queries(filepath):
     sql_statements = [item.replace('\n', '') for item in sql_statements]
     sql_statements = [item.replace('\t', '') for item in sql_statements]
     sql_statements = [item.strip() for item in sql_statements]
-
-    for statement in sql_statements:
-        print(validate_sql_syntax(statement))
-    
+   
     # Check the syntax of the SQL statements
         #logging.error(check_syntax(sql_statements))
+
+    return sql_statements
+
       
+def file_writer(filepath, sql_statements):
+    """
+    This function writes the SQL statements to a CSV file.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the CSV file.
+    sql_statements : list
+        List of SQL statements.
+    """
+    # Write the SQL statements to a CSV file
+    with open(filepath, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["SQL Statement"])
+        for sql_statement in sql_statements:
+            writer.writerow([sql_statement])
+
+def sql_classification(sql_statements):
+    """
+    This function classifies the SQL statements using KMeans clustering.
+
+    Parameters
+    ----------
+    sql_statements : list
+        List of SQL statements.
+
+    """
+
+    # Vectorize the SQL statements using TF-IDF
+    vectorizer = TfidfVectorizer(stop_words='english')
+    X = vectorizer.fit_transform(sql_statements)
+
+    # Cluster the SQL statements using KMeans
+    kmeans = KMeans(n_clusters=3, random_state=0)
+    kmeans.fit(X)
+
+
+    # Extract features from the new query
+    for query in sql_statements:
+        new_query_features = vectorizer.transform([query])
+
+    # Predict the cluster of the new query
+    from sklearn.decomposition import TruncatedSVD
+    pca = TruncatedSVD(n_components=2, random_state=0)
+    X_pca = pca.fit_transform(X)
+
+    # Plot the clusters with different colors
+    colors = np.random.rand(3)
+    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=colors)
+    plt.show()
 
 def main():
 
@@ -147,7 +203,14 @@ def main():
     db_name, db_id, hostname = get_awrr_info("awrr/awrrpt_1_285_286.html")
 
     # Extract the SQL statements from the HTML file
-    pars_queries("awrr/awrrpt_1_285_286.html")
+    sql_statements = pars_queries("awrr/awrrpt_1_285_286.html")
+
+    # Write the SQL statements to a CSV file
+    file_name = db_name + "_" + db_id + "_" + hostname + ".csv"
+    file_writer(file_name, sql_statements)
+
+    # Classifies the SQL statements
+    sql_classification(sql_statements)
 
 
 if __name__ == '__main__':
