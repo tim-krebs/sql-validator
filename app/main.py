@@ -32,9 +32,9 @@ def check_sql_syntax(sql_statement):
 
     # Check if the model generated any errors or warnings
     if "syntax error" in response.choices[0].text.lower():
-        return False
+        return f"Syntax Error: {sql_statement}"
     elif "warning" in response.choices[0].text.lower():
-        return False
+        return f"Warning: {sql_statement}"
     else:
         return True
 
