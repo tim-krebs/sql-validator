@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 
 
-def check_sql_syntax(sql_statement):
+def check_sql_syntax(sql_statement, completion_length=1024):
     """
     This function checks the syntax of the SQL statement using the Codex model.
 
@@ -18,25 +18,92 @@ def check_sql_syntax(sql_statement):
     ----------
     sql_statement : str
         SQL statement.
+    completion_length : int
+        Number of tokens to generate.
 
     """
-    # Send the SQL statement to the Codex model
-    response = openai.Completion.create(
-        engine="davinci-codex",
-        prompt=f"Check the syntax of this SQL statement:\n{sql_statement}\n\n",
-        max_tokens=1024,
-        n=1,
-        stop=None,
-        temperature=0.5,
-    )
 
-    # Check if the model generated any errors or warnings
-    if "syntax error" in response.choices[0].text.lower():
-        return f"Syntax Error: {sql_statement}"
-    elif "warning" in response.choices[0].text.lower():
-        return f"Warning: {sql_statement}"
-    else:
-        return True
+    ## Send the SQL statement to the Codex model
+    #response = openai.Completion.create(
+    #    engine="davinci-codex",
+    #    prompt=f"Check the syntax of this SQL statement:\n{sql_statement}\n\n",
+    #    max_tokens=1024,
+    #    n=1,
+    #    stop=None,
+    #    temperature=0.5,
+    #)
+
+    try:
+        response = openai.Completion.create(
+            engine="davinci-codex",
+            prompt=f"Check the syntax of this SQL statement:\n{sql_statement}\n\n",
+            max_tokens=completion_length,
+            n=1,
+        )
+    except openai.error.InvalidRequestError as e:
+        if "parameter 'max_tokens' must be at most" in str(e):
+            max_context_length = 4096 - completion_length
+            response = openai.Completion.create(
+                engine="davinci-codex",
+                prompt=f"Check the syntax of this SQL statement:\n{sql_statement}\n\n"[-max_context_length:],
+                max_tokens=completion_length,
+                n=1,
+                temperature=0.7,
+            )
+            # Check if the model generated any errors or warnings
+            if "syntax error" in response.choices[0].text.lower():
+                return f"Syntax Error: {sql_statement}"
+            elif "warning" in response.choices[0].text.lower():
+                return f"Warning: {sql_statement}"
+            else:
+                return True
+        else:
+            try:
+                response = openai.Completion.create(
+                    engine="text-davinci-002",
+                    prompt=f"Is the following SQL statement valid?\n\n{sql_statement}\n\nAnswer:",
+                    max_tokens=2048,
+                    n=1,
+                    stop=None,
+                    temperature=0.5,
+                )
+                answer = response.choices[0].text.strip()
+                if answer.lower() == "yes":
+                    return True
+                else:
+                    if "syntax error" in response.choices[0].text.lower():
+                        return f"Syntax Error: {sql_statement}"
+                    elif "warning" in response.choices[0].text.lower():
+                        return f"Warning: {sql_statement}"
+                    
+            except openai.error.InvalidRequestError as e:
+                if "parameter 'max_tokens' must be at most" in str(e):
+                    max_context_length = 4096 - completion_length
+                    response = openai.Completion.create(
+                        engine="text-davinci-002",
+                        prompt=f"Is the following SQL statement valid?\n\n{sql_statement}\n\nAnswer:"[-max_context_length:],
+                        max_tokens=completion_length,
+                        n=1,
+                        temperature=0.7,
+                    )
+                    answer = response.choices[0].text.strip()
+                    if answer.lower() == "yes":
+                        return True
+                    else:
+                        if "syntax error" in response.choices[0].text.lower():
+                            return f"Syntax Error: {sql_statement}"
+                        elif "warning" in response.choices[0].text.lower():
+                            return f"Warning: {sql_statement}"
+                else:
+                    return f"Error: {sql_statement}"
+
+    ## Check if the model generated any errors or warnings
+    #if "syntax error" in response.choices[0].text.lower():
+    #    return f"Syntax Error: {sql_statement}"
+    #elif "warning" in response.choices[0].text.lower():
+    #    return f"Warning: {sql_statement}"
+    #else:
+    #    return True
 
 def get_awrr_info(filepath):
     """
@@ -130,7 +197,7 @@ def main():
     load_dotenv()
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    awrr_file = "awrr/awrrpt_1_285_286.html"
+    awrr_file = "data/awr_PRDM_2_174597_174614.htm"
 
     logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
