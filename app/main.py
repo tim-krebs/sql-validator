@@ -40,6 +40,14 @@ def check_sql_syntax(sql_statement, completion_length=1024):
             max_tokens=completion_length,
             n=1,
         )
+        # Check if the model generated any errors or warnings
+        if "syntax error" in response.choices[0].text.lower():
+            return f"Syntax Error: {sql_statement}"
+        elif "warning" in response.choices[0].text.lower():
+            return f"Warning: {sql_statement}"
+        else:
+            return True
+        
     except openai.error.InvalidRequestError as e:
         if "parameter 'max_tokens' must be at most" in str(e):
             max_context_length = 4096 - completion_length
@@ -173,7 +181,7 @@ def pars_queries(filepath):
     return sql_statements
 
       
-def file_writer(filepath, sql_statements):
+def file_writer(filepath, sql_statement):
     """
     This function writes the SQL statements to a CSV file.
 
@@ -187,9 +195,8 @@ def file_writer(filepath, sql_statements):
     # Write the SQL statements to a CSV file
     with open(filepath, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["SQL Statement"])
-        for sql_statement in sql_statements:
-            writer.writerow([sql_statement])
+        
+        writer.writerow([sql_statement])
 
 
 def main():
@@ -197,7 +204,7 @@ def main():
     load_dotenv()
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    awrr_file = "data/awr_PRDM_2_174597_174614.htm"
+    awrr_file = "data/awrrpt_1_285_286.html"
 
     logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
@@ -210,15 +217,21 @@ def main():
     db_name, db_id, hostname = get_awrr_info(awrr_file)
     sql_statements = pars_queries(awrr_file)
 
-    # Write the SQL statements to a CSV file
-    file_name = db_name + "_" + db_id + "_" + hostname + ".csv"
-    file_writer(file_name, sql_statements)
 
     # Classifies the SQL statements
+    valid_statements = []
     for sql_statement in sql_statements:
-        logging.warning(check_sql_syntax(sql_statement))
+        
+        if check_sql_syntax(sql_statement):
+            logging.warning(f"SQL statement is valid: {sql_statement}")
+            valid_statements.append(sql_statement)
+        
+        else:
+            logging.error(f"SQL statement is invalid: {sql_statement}")
 
-
+    # Write the valid SQL statements to a CSV file
+    file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
+    file_writer(file_name, valid_statements)
 
 if __name__ == '__main__':
     # Run the main function
