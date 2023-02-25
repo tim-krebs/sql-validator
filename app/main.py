@@ -2,12 +2,37 @@ import os
 import re
 import csv
 import openai
+import platform
 import logging
 import cx_Oracle
 import time
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+
+def simplify_sql(sql_query):
+    # Set up the OpenAI API client
+    prompt = f"Simplify the following SQL query:\n\n{sql_query}\n\nSimplified query:"
+
+    # Call the OpenAI API to generate the simplified query
+    response = openai.Completion.create(
+        engine="davinci-codex",
+        prompt=prompt,
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        temperature=0.5,
+    )
+
+    # Extract the simplified query from the API response
+    simplified_query = response.choices[0].text.strip()
+
+    return simplified_query
+
+# Example usage
+original_query = "SELECT column1, column2 FROM table1 WHERE column3 = 'value1' AND column4 = 'value2';"
+simplified_query = simplify_sql(original_query)
+print(f"Original query:\n{original_query}\n\nSimplified query:\n{simplified_query}")
 
 
 def check_sql_syntax(sql_statement, completion_length=1024):
@@ -181,7 +206,7 @@ def pars_queries(filepath):
     return sql_statements
 
       
-def file_writer(filepath, sql_statement):
+def file_writer(folder, filepath, sql_statement):
     """
     This function writes the SQL statements to a CSV file.
 
@@ -193,7 +218,7 @@ def file_writer(filepath, sql_statement):
         List of SQL statements.
     """
     # Write the SQL statements to a CSV file
-    with open(f"results/{filepath}", 'w', newline='') as file:
+    with open(folder+"/"+filepath, 'w', newline='') as file:
         writer = csv.writer(file)
         
         writer.writerow([sql_statement])
@@ -209,13 +234,22 @@ def main():
     logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
     # Initialize the Oracle client - not needed anymore
-    cx_Oracle.init_oracle_client(lib_dir=r"C:\oracle\instantclient_21_9")
-    logging.warning(cx_Oracle.version)
-    logging.warning(cx_Oracle.clientversion())
+    if platform.system() == "Windows":
+        cx_Oracle.init_oracle_client(lib_dir=r"C:\oracle\instantclient_21_9")
+        logging.warning(cx_Oracle.version)
+        logging.warning(cx_Oracle.clientversion())
 
     # Get the AWR report information
     db_name, db_id, hostname = get_awrr_info(awrr_file)
     sql_statements = pars_queries(awrr_file)
+
+    # Simplify the SQL statements
+    
+    file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
+    simplified_query = []
+    for sql_statement in sql_statements:
+        simplified_query.append(simplify_sql(sql_statement))
+    file_writer("simplified",file_name, simplified_query )
 
 
     # Classifies the SQL statements
@@ -231,7 +265,7 @@ def main():
 
     # Write the valid SQL statements to a CSV file
     file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
-    file_writer(file_name, valid_statements)
+    file_writer("result", file_name, valid_statements)
 
 if __name__ == '__main__':
     # Run the main function
