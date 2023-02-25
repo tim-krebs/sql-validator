@@ -193,7 +193,7 @@ def file_writer(filepath, sql_statement):
         List of SQL statements.
     """
     # Write the SQL statements to a CSV file
-    with open(filepath, 'w', newline='') as file:
+    with open(f"results/{filepath}", 'w', newline='') as file:
         writer = csv.writer(file)
         
         writer.writerow([sql_statement])
