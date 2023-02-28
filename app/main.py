@@ -2,17 +2,23 @@ import os
 import re
 import csv
 import openai
-import platform
 import logging
 import cx_Oracle
+import platform
 import time
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)  # for exponential backoff
 
 
+@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
 def simplify_sql(sql_query):
     # Set up the OpenAI API client
-    prompt = f"Simplify the following SQL query:\n\n{sql_query}\n\nSimplified query:"
+    prompt = f"Simplify the following SQL query to visualize:\n\n{sql_query}\n\n"
 
     # Call the OpenAI API to generate the simplified query
     response = openai.Completion.create(
@@ -29,23 +35,17 @@ def simplify_sql(sql_query):
 
     return simplified_query
 
-# Example usage
-original_query = "SELECT column1, column2 FROM table1 WHERE column3 = 'value1' AND column4 = 'value2';"
-simplified_query = simplify_sql(original_query)
-print(f"Original query:\n{original_query}\n\nSimplified query:\n{simplified_query}")
 
-
+@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
 def check_sql_syntax(sql_statement, completion_length=1024):
     """
     This function checks the syntax of the SQL statement using the Codex model.
-
     Parameters
     ----------
     sql_statement : str
         SQL statement.
     completion_length : int
         Number of tokens to generate.
-
     """
 
     ## Send the SQL statement to the Codex model
@@ -141,7 +141,6 @@ def check_sql_syntax(sql_statement, completion_length=1024):
 def get_awrr_info(filepath):
     """
     This function extracts the database name, database ID, and hostname from the HTML file.
-
     Parameters
     ----------
     filepath : str
@@ -177,12 +176,10 @@ def get_awrr_info(filepath):
 def pars_queries(filepath):
     """
     This function extracts the SQL statements from the HTML file and stores them in a list.
-
     Parameters
     ----------
     filepath : str
         Path to the HTML file.
-
     """
     # Open the HTML file
     with open(filepath, 'r') as file:
@@ -209,7 +206,6 @@ def pars_queries(filepath):
 def file_writer(folder, filepath, sql_statement):
     """
     This function writes the SQL statements to a CSV file.
-
     Parameters
     ----------
     filepath : str
@@ -249,8 +245,12 @@ def main():
     simplified_query = []
     for sql_statement in sql_statements:
         simplified_query.append(simplify_sql(sql_statement))
+        simplified_query = [item.replace('&lt', '<') for item in simplified_query]
+        simplified_query = [item.replace('&gt', '>') for item in simplified_query]
+        simplified_query = [item.strip('# * \n`')    for item in simplified_query]
+    
     file_writer("simplified",file_name, simplified_query )
-
+    logging.warning("Simplified SQL statements written to file")
 
     # Classifies the SQL statements
     valid_statements = []
@@ -266,6 +266,8 @@ def main():
     # Write the valid SQL statements to a CSV file
     file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
     file_writer("result", file_name, valid_statements)
+    print("Valid SQL statements written to file")
+
 
 if __name__ == '__main__':
     # Run the main function
