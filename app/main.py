@@ -3,7 +3,6 @@ import re
 import csv
 import openai
 import logging
-import cx_Oracle
 import platform
 import time
 from bs4 import BeautifulSoup
@@ -72,7 +71,7 @@ def check_sql_syntax(sql_statement, completion_length=1024):
             return f"Warning: {sql_statement}"
         else:
             return True
-        
+
     except openai.error.InvalidRequestError as e:
         if "parameter 'max_tokens' must be at most" in str(e):
             max_context_length = 4096 - completion_length
@@ -108,7 +107,7 @@ def check_sql_syntax(sql_statement, completion_length=1024):
                         return f"Syntax Error: {sql_statement}"
                     elif "warning" in response.choices[0].text.lower():
                         return f"Warning: {sql_statement}"
-                    
+
             except openai.error.InvalidRequestError as e:
                 if "parameter 'max_tokens' must be at most" in str(e):
                     max_context_length = 4096 - completion_length
@@ -157,7 +156,7 @@ def get_awrr_info(filepath):
     # Read the HTML file
     with open(filepath, "r") as file:
         html = file.read()
-        
+
     # Parse the HTML file
     soup = BeautifulSoup(html, 'html.parser')
 
@@ -170,7 +169,7 @@ def get_awrr_info(filepath):
             db_name = cells[0].text
             db_id = cells[1].text
             print(f"DB Name: {db_name}, ID: {db_id}, HOSTNAME: {host_name}")
-            
+
     return db_name, db_id, host_name
 
 def pars_queries(filepath):
@@ -196,14 +195,14 @@ def pars_queries(filepath):
     sql_statements = [item.replace('\n', '') for item in sql_statements]
     sql_statements = [item.replace('\t', '') for item in sql_statements]
     sql_statements = [item.strip() for item in sql_statements]
-   
+
     # Check the syntax of the SQL statements
         #logging.error(check_syntax(sql_statements))
 
     return sql_statements
 
-      
-def file_writer(folder, filepath, sql_statement):
+
+def file_writer(folder, filepath, sql_statements):
     """
     This function writes the SQL statements to a CSV file.
     Parameters
@@ -216,8 +215,9 @@ def file_writer(folder, filepath, sql_statement):
     # Write the SQL statements to a CSV file
     with open(folder+"/"+filepath, 'w', newline='') as file:
         writer = csv.writer(file)
-        
-        writer.writerow([sql_statement])
+
+        for sql_statement in sql_statements:
+            writer.writerow([sql_statement])
 
 
 def main():
@@ -229,18 +229,12 @@ def main():
 
     logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
-    # Initialize the Oracle client - not needed anymore
-    if platform.system() == "Windows":
-        cx_Oracle.init_oracle_client(lib_dir=r"C:\oracle\instantclient_21_9")
-        logging.warning(cx_Oracle.version)
-        logging.warning(cx_Oracle.clientversion())
-
     # Get the AWR report information
     db_name, db_id, hostname = get_awrr_info(awrr_file)
     sql_statements = pars_queries(awrr_file)
 
     # Simplify the SQL statements
-    
+
     file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
     simplified_query = []
     for sql_statement in sql_statements:
@@ -248,24 +242,24 @@ def main():
         simplified_query = [item.replace('&lt', '<') for item in simplified_query]
         simplified_query = [item.replace('&gt', '>') for item in simplified_query]
         simplified_query = [item.strip('# * \n`')    for item in simplified_query]
-    
+
     file_writer("simplified",file_name, simplified_query )
     logging.warning("Simplified SQL statements written to file")
 
     # Classifies the SQL statements
     valid_statements = []
     for sql_statement in sql_statements:
-        
+
         if check_sql_syntax(sql_statement):
             logging.warning(f"SQL statement is valid: {sql_statement}")
             valid_statements.append(sql_statement)
-        
+
         else:
             logging.error(f"SQL statement is invalid: {sql_statement}")
 
     # Write the valid SQL statements to a CSV file
     file_name = db_name + "_" + db_id + "_" + hostname + "_valid.csv"
-    file_writer("result", file_name, valid_statements)
+    file_writer("results", file_name, valid_statements)
     print("Valid SQL statements written to file")
 
 
