@@ -4,3 +4,6 @@ sql_metadata
 openai
 cx-Oracle
 mysql-connector-python
+beautifulsoup4
+tenacity
+python-dotenv
