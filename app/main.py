@@ -222,7 +222,7 @@ def file_writer(folder, filepath, sql_statements):
         List of SQL statements.
     """
     # Write the SQL statements to a CSV file
-    with open(folder+"/"+filepath, 'w', newline='') as file:
+    with open(folder+"/"+filepath, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
 
         for sql_statement in sql_statements:
