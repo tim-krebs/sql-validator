@@ -194,6 +194,7 @@ def pars_queries(filepath):
 
     sql_statements = [item.replace('\n', '') for item in sql_statements]
     sql_statements = [item.replace('\t', '') for item in sql_statements]
+    sql_statements = [item.replace('&quot', '') for item in sql_statements]
     sql_statements = [item.strip() for item in sql_statements]
 
     # Check the syntax of the SQL statements
@@ -201,6 +202,14 @@ def pars_queries(filepath):
 
     return sql_statements
 
+def remove_comments(sql_statements):
+    # Remove all comments starting with "/*" and ending with "*/"
+    cleared_sql = []
+    for item in sql_statements:
+        sql = re.sub(r"/\*.*?\*/", "", item, flags=re.DOTALL)
+        cleared_sql.append(sql)
+
+    return cleared_sql
 
 def file_writer(folder, filepath, sql_statements):
     """
@@ -243,8 +252,9 @@ def main():
         simplified_query = [item.replace('&gt', '>') for item in simplified_query]
         simplified_query = [item.strip('# * \n`')    for item in simplified_query]
 
-    file_writer("simplified",file_name, simplified_query )
-    logging.warning("Simplified SQL statements written to file")
+    sql_statements = remove_comments(sql_statements)
+    #file_writer("simplified",file_name, simplified_query )
+    #logging.warning("Simplified SQL statements written to file")
 
     # Classifies the SQL statements
     valid_statements = []
